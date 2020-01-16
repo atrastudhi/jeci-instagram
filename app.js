@@ -6,11 +6,18 @@ const knex = require('knex')(require('./knexfile'));
 const twit = require('twit');
 const axios = require('axios');
 const path = require('path');
+const app = require('express')();
 
 // const user = JSON.parse(fs.readFileSync('user.json', 'UTF-8'));
 const Instagram = new nistagram.default();
 const members = ['jkt48.jessi'];
 const userIds = ['10672013127'];
+
+let instagram;
+
+(async() => {
+	instagram = await Instagram.login(process.env.UNAME, process.env.PASS);
+})();
 
 const upsert = async (params) => {
   const {table, object, constraint} = params;
@@ -65,7 +72,7 @@ const getPosts = async (instagram) => {
 
 	let filter = [];
 
-	response.forEach(e => {
+	response.forEach((e, i) => {
 		if (e.node.__typename !== 'GraphStoriesInFeedItem') {
 			filter.push(e);
 		};
@@ -133,8 +140,11 @@ const publish = async () => {
 		.where('is_posted', false)
 		.orderBy('taken_at', 'ASC')
 		.limit(1))[0];
-	console.log(media);
-	if (!media) return false;
+	
+	if (!media) {
+		console.log('ga ada bro');
+		return false;
+	}
 
 	const { length } = media.media_children;
 
@@ -146,32 +156,33 @@ const publish = async () => {
 
 		const filePath = path.join(__dirname, fileName);
 		const twitterMedia = await postMediaChunked(filePath);
-
+		
 		const result = await Twitter.post('statuses/update', {
 			status: `${media.type === 'STORY' ? '(Instagram Story)' : '(Instagram Post)'} ${media.caption ? '' + media.caption.substring(0, 100) : ''}`,
 			media_ids: [twitterMedia],
 			in_reply_to_status_id: previousStatusId});
-
-		previousStatusId = result.data.id_str;
-	}
-	
-	await knex('medias')
+			
+			previousStatusId = result.data.id_str;
+		}
+		
+		await knex('medias')
 		.update({is_posted: true})
 		.where('id', media.id);
 
 	return true;
 };
 
-(async() => {
-	const instagram = await Instagram.login(process.env.UNAME, process.env.PASS);
-
+app.get('/', async (req, res) => {
 	await getPosts(instagram);
 	await getStories(instagram);
 	await publish();
 
-	setInterval(async () => {
-		await getPosts(instagram);
-		await getStories(instagram);
-		await publish();
-	}, 1000*60*1);
-})();
+	res.status(200).json({
+		msg: 'yaampun jeci lucu banget sih'
+	});
+});
+
+app.listen(1313, () => {
+	console.log('app listen on 1313...');
+});
+
